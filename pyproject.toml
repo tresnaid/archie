@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bookmedia"
+version = "0.1.0"
+description = "Telegram-based personal social-media archive"
+requires-python = ">=3.12"
+dependencies = ["yt-dlp==2026.8.19"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+bookmedia = ["*.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast tests with no network access (default)",
+    "integration: tests that access real external platforms (opt-in)",
+]

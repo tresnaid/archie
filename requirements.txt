@@ -1,0 +1,2 @@
+# Dev/test dependencies (host only, not installed in the Docker image).
+pytest>=8

@@ -1,0 +1,57 @@
+services:
+  app:
+    build: .
+    env_file: .env
+    # Use the host network stack directly (bypasses Docker's virtual bridge NAT).
+    # On WSL2 this is essential — the extra NAT layer causes TLS fingerprinting
+    # failures with TikTok, X, and Instagram even on a residential connection.
+    network_mode: host
+    volumes:
+      # SQLite archive index (persistent, never delete casually).
+      - ./data:/app/data
+      # Temporary media processing (ephemeral).
+      - ./tmp:/app/tmp
+      # Optional extractor cookies (read-only, may stay empty).
+      - ./cookies:/app/cookies:ro
+    # Long-running polling process; restart with the Docker daemon.
+    restart: unless-stopped
+    # Allow yt-dlp + ffmpeg a clean shutdown window before SIGKILL.
+    # On restart, unconfirmed Telegram updates are re-polled (offset resets)
+    # and duplicate detection prevents double-archiving.
+    stop_grace_period: 30s
+    # Resource limits: worst case is yt-dlp assembling a 1 GB+ HLS video plus
+    # the ffmpeg merge of its separate audio track. 1g OOM-killed the container
+    # in a crash/restart loop on such a post (see TROUBLESHOOTING.md); 2g fits
+    # an 8 GB host. Adjust for your hardware.
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 128
+    # Cap docker log growth; diagnostics live in the database.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Optional: local Telegram Bot API server for >50 MB uploads (up to 2 GB).
+  # Only needed when LOCAL_BOT_API_HOST is set in .env.
+  # IMPORTANT: run `curl -s -X POST "https://api.telegram.org/bot<TOKEN>/logOut"`
+  # once before enabling, so the token only works against the local server.
+  bot-api:
+    image: aiogram/telegram-bot-api:latest
+    network_mode: host
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      TELEGRAM_LOCAL: 1
+    volumes:
+      - bot-api-data:/var/lib/telegram-bot-api
+      # Same host directory the app uses; bot-api reads media via file://
+      - ./tmp:/app/tmp:ro
+    restart: unless-stopped
+    # Only start when explicitly enabled via profile.
+    profiles:
+      - local-api
+
+volumes:
+  bot-api-data:

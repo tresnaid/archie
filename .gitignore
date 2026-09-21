@@ -1,0 +1,15 @@
+.env
+*.db
+*.db-wal
+*.db-shm
+data/
+tmp/
+cookies/*
+!cookies/.gitkeep
+__pycache__/
+.pytest_cache/
+*.pyc
+bot.log
+bot_live.log
+*.egg-info/
+.venv/

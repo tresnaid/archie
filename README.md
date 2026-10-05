@@ -1,216 +1,199 @@
-# Telegram Social Archive
+# ARCHIE
 
-A small self-hosted Telegram bot for preserving social-media posts.
+A self-hosted Telegram bot for archiving and preserving social media posts, videos, and threads directly into Telegram storage with SQLite indexing.
 
-Share a link into your private Telegram group and the bot archives the underlying media or post content into Telegram.
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org/)
+[![Telegram Bot API](https://img.shields.io/badge/Telegram-Bot_API-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://core.telegram.org/bots/api)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
+[![SQLite](https://img.shields.io/badge/Database-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![yt--dlp](https://img.shields.io/badge/Extractor-yt--dlp-red?style=flat-square)](https://github.com/yt-dlp/yt-dlp)
+[![Tests: pytest](https://img.shields.io/badge/Tests-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-No AI, LLM, automatic classification, or external storage service is required.
+---
 
-## Why This Exists
+## Overview
 
-Social platforms are not archives.
+Social platforms are volatile. Research indicates that over 25% of webpages from the past decade are no longer accessible, and social media posts are frequently deleted, suspended, or altered. Platform-native bookmarks only store links, which break when the source post disappears.
 
-- Pew Research Center found that a quarter of all webpages that existed between 2013 and 2023 were no longer accessible by October 2023, and 38% of webpages from 2013 are gone a decade later (https://www.pewresearch.org/data-labs/2024/05/17/when-online-content-disappears/).
-- On X/Twitter, half of the posts that are eventually removed become unavailable within six days of being posted, and 90% within 46 days.
-- Platform-native saves (favorites, collections, bookmarks) disappear with the post, the account, or the platform itself.
+**ARCHIE** stores the actual media and post content:
+- Share a link into your private Telegram group or topic.
+- Archie extracts the media, re-uploads it into Telegram, and records full metadata and original publication timestamps in a local SQLite index.
+- No external cloud storage subscriptions, third-party accounts, or proprietary databases required.
 
-A bookmark stores a pointer, not the content. This bot stores the content: media is re-uploaded into a Telegram group you already use, with the original publication timestamp preserved in the filename and a SQLite index recording what was archived, when, and from where.
-
-The design goal is minimal friction: see a post, paste the link into a chat, done. No new app, account, or storage service.
+---
 
 ## Supported Sources
 
-Initial target platforms:
+- **Instagram** (Posts, Reels, Carousels)
+- **TikTok** (Videos, Slideshows)
+- **X / Twitter** (Videos, Images, Thread Text)
+- **Threads** (Media and Text posts)
 
-- Instagram
-- TikTok
-- X / Twitter
-- Threads
+*Platform extraction leverages yt-dlp and modular extractors with optional authenticated session cookie support.*
 
-Platform support depends on the available extractors and may require authenticated cookies for some content.
+---
 
 ## Usage
 
-Send:
+### Simple Archiving
+Paste any supported link directly into your Telegram group:
 
-`https://x.com/user/status/123`
+```text
+https://x.com/user/status/1234567890
+```
 
-Or optionally categorize it:
+### Custom Categories
+Append an optional category flag to tag and organize entries:
 
-`https://x.com/user/status/123 --type=research`
+```text
+https://x.com/user/status/1234567890 --type=research
+https://x.com/user/status/1234567890 --type=design
+https://x.com/user/status/1234567890 --type=dev
+```
 
-The bot downloads the post media, re-uploads it into the chat, and records it
-in the local index, then replies with a short summary (author, platform,
-media count, category).
+When no type is specified, the entry defaults to `type = unsorted`.
 
-Posts with no downloadable media are archived as a text message instead.
+### How Media is Stored
+- **Single Media:** `username__YYYYMMDD_HHMMSS.mp4`
+- **Carousels / Multiple Media:**
+  - `username__YYYYMMDD_HHMMSS(1).jpg`
+  - `username__YYYYMMDD_HHMMSS(2).jpg`
+  - `username__YYYYMMDD_HHMMSS(3).mp4`
 
-## Categories
+The filename preserves the original post's publication timestamp whenever provided by the upstream platform.
 
-Categories are optional and user-defined.
+---
 
-Examples:
+## Reliability & Fault Tolerance
 
-`--type=research`
+- **Atomic Message Tracking:** Every sent Telegram message is recorded immediately. Partially uploaded carousels retain their uploaded message IDs and are marked `failed` rather than `archived` until all items succeed.
+- **Safe Retries:** Failed jobs store a bounded error description. Sending the same link again automatically re-triggers processing without duplicating database records.
+- **Crash Recovery:** If the container restarts mid-pipeline, interrupted rows are marked as `failed` on startup and orphaned temporary files are safely swept.
+- **Health Heartbeat:** The container maintains a live heartbeat poll loop and reports health status through `docker compose ps`.
 
-`--type=github`
+---
 
-`--type=idea`
+## Architecture & Requirements
 
-When no type is supplied:
+### Tech Stack
+- **Runtime:** Python 3.12+
+- **Containerization:** Docker & Docker Compose
+- **Database:** Embedded SQLite
+- **Extractor:** `yt-dlp` (pinned via `pyproject.toml`)
+- **Testing:** `pytest` (unit and integration test suites)
 
-`type = unsorted`
+```text
+archie/
+├── src/
+│   └── bookmedia/      # Bot core, polling engine, extractors, DB models
+├── tests/              # Unit & integration test suites
+├── cookies/            # Optional platform authentication cookies
+├── docker-compose.yml  # Multi-service container orchestration
+├── Dockerfile          # Production container build
+├── pyproject.toml      # Python build configuration and dependencies
+└── requirements.txt    # Frozen pip dependencies
+```
 
-There is intentionally no predefined category list.
+---
 
-## Filenames
+## Setup & Deployment
 
-Single media:
+### 1. Prerequisites
+- Docker & Docker Compose
+- Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
 
-`username__YYYYMMDD_HHMMSS.mp4`
+### 2. Configuration
+Copy the environment template:
 
-Example:
+```bash
+cp .env.example .env
+```
 
-`user__20260910_142530.mp4`
+Configure your `.env` variables:
 
-Multiple media:
+```dotenv
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ
+TELEGRAM_ALLOWED_USER_IDS=12345678,87654321
+DATA_DIR=/app/data
+TEMP_DIR=/app/tmp
+COOKIES_PATH=/app/cookies/cookies.txt
+LOG_LEVEL=INFO
+```
 
-`user__20260910_142530(1).jpg`
+### 3. Initialize Directories & Start Service
 
-`user__20260910_142530(2).jpg`
+Create host mount points:
 
-`user__20260910_142530(3).mp4`
+```bash
+mkdir -p data tmp cookies
+```
 
-The timestamp represents the original post publication time when available.
+Start the container in the background:
 
-## Storage
+```bash
+docker compose up -d
+```
 
-Telegram stores archived media.
+Check container health:
 
-SQLite stores the archive index and metadata.
+```bash
+docker compose ps
+docker compose logs -f
+```
 
-Temporary media exists locally only while a post is being processed and should be deleted after successful upload.
+---
 
-## Reliability
+## Status & Operations
 
-- Every sent Telegram message is recorded immediately, so a partially
-  uploaded post keeps its uploaded message IDs and is marked `failed`
-  instead of `archived`.
-- Any failure leaves a stored, bounded error and the row stays retryable:
-  resend the same link to retry it.
-- After a restart, rows the dead process left mid-pipeline are marked
-  `failed` (`interrupted by restart while …`) and orphan temp files are
-  swept; resend to retry.
-- The container reports `healthy` while the poll loop is alive
-  (`docker compose ps`).
+### Health & Pipeline Inspection
 
-## Requirements
+Inspect archive counts, in-flight jobs, and pipeline status:
 
-Recommended deployment:
+```bash
+PYTHONPATH=src python3 -m bookmedia.status --db ./data/archive.db
+```
 
-- Docker
-- Docker Compose
+Useful inspection flags:
+- `--status uploading`: View jobs currently in-flight
+- `--limit 20`: Show recent activity
+- `--stale-minutes 10`: Adjust stuck job detection threshold
 
-Application stack:
+### Safe Database Backup
 
-- Python
-- Telegram Bot API
-- SQLite
-- yt-dlp for metadata extraction (pinned in `pyproject.toml`)
+Safely back up the active SQLite database without stopping the container:
 
-## Configuration
+```bash
+sqlite3 ./data/archive.db ".backup './data/archive-backup.db'"
+```
 
-Create `.env` from `.env.example`.
-
-Example variables (see `.env.example` for the full list):
-
-`TELEGRAM_BOT_TOKEN=`
-
-`TELEGRAM_ALLOWED_USER_IDS=` (optional)
-
-`DATA_DIR=/app/data`
-
-`TEMP_DIR=/app/tmp`
-
-`COOKIES_PATH=/app/cookies/cookies.txt` (optional; used by the extractor when the file exists)
-
-`LOG_LEVEL=INFO`
-
-Never commit real credentials.
-
-## Running
-
-Copy `.env.example` to `.env` and fill in your values:
-
-`cp .env.example .env`
-
-Create the host mount points as your own user (Docker would otherwise
-create them as root and the container could not write to them):
-
-`mkdir -p data tmp cookies`
-
-Start (the bot polls Telegram for new messages from any group it has been added to):
-
-`docker compose up -d`
-
-The bot must be a member of any group you want to use it in, with permission to read
-messages (disable privacy mode via @BotFather or make it an admin); otherwise it
-hears nothing and stays silent.
-
-In groups with topics enabled, the bot posts the archive and its replies into the
-same topic the link was shared in.
-
-Logs:
-
-`docker compose logs`
-
-Every ignored message logs its reason, so silence is always explainable.
-
-Container health (healthy while the poll loop's heartbeat is fresh):
-
-`docker compose ps`
-
-Status (liveness plus archive counts, in-flight/STUCK rows, idle detection,
-per-row last-update ages; exit 1 when polling is stale):
-
-`PYTHONPATH=src python3 -m bookmedia.status --db ./data/archive.db`
-
-Useful flags: `--status uploading` lists only rows in that state,
-`--limit 20` shows more rows, `--stale-minutes 10` widens the stuck
-detection window.
-
-Backup (safe to run while the bot is up; never copy `archive.db` directly):
-
-`sqlite3 ./data/archive.db ".backup './data/archive-backup.db'"`
-
-Treat the backup as private — it contains your archive history.
+---
 
 ## Monitoring Dashboard
 
-Optional, disabled by default. Set `DASHBOARD_PORT=8080` in `.env`, restart,
-and open `http://127.0.0.1:8080/` on the same machine (localhost only):
+Archie includes an optional local web dashboard for monitoring archive status, reviewing logs, and retrying failed links.
 
-- archive table with live auto-refresh (every 5 s)
-- filter by status, platform, type, or free-text search; sort by any column
-  (click a header) — the selection is kept in the URL, so it survives
-  refresh and can be bookmarked
-- per-row Retry (`failed`/`received` rows re-run the real pipeline) and
-  Cancel (mark an in-flight row `failed`)
-- `GET /api/health` — machine-readable heartbeat for scripts
+To enable, set `DASHBOARD_PORT=8080` in `.env` and restart. Access the dashboard at:  
+`http://127.0.0.1:8080/`
 
-The dashboard never exposes the bot token and is an operator tool, not a
-public web application.
+- **Live Auto-Refresh:** Updates archive status every 5 seconds.
+- **Search & Filter:** Search by URL, platform, username, or category tag.
+- **Operator Actions:** One-click retry for failed rows or cancel in-flight jobs.
+- **Health Endpoint:** `GET /api/health` machine-readable health check.
 
-Stop (database in `./data` is preserved):
+---
 
-`docker compose down`
+## Running Tests
 
-Run tests on the host:
+Run the test suite with pytest:
 
-`pip install -r requirements.txt`
+```bash
+pip install -r requirements.txt
+pytest -q
+```
 
-`pytest -q`
+---
 
-## Documentation
+## License
 
-This project's operational documentation lives in the maintainer's private repository.
+This project is open-source software licensed under the [MIT License](LICENSE).
